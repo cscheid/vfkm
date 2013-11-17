@@ -46,6 +46,56 @@ Util::Util()
 {
 }
 
+void Util::loadCurves(stringstream &file, vector<PolygonalPath>& curves,
+                      float &xmin, float &xmax, float &ymin, float &ymax,
+                      float &tmin, float &tmax)
+{
+    xmin = FLT_MAX;
+    ymin = FLT_MAX;
+    tmin = FLT_MAX;
+    xmax = -FLT_MAX;
+    ymax = -FLT_MAX;
+    tmax = -FLT_MAX;
+
+    file >> ymin >> ymax >> xmin >> xmax >> tmin >> tmax;
+
+    vector<pair<Vector2D,float> > curveContents;
+
+    while (file.good()  && !file.eof()) {
+        float x,y,t;
+        //file >> x >> y >> t;
+        file >> y >> x >> t;
+
+        if(x == 0 && y == 0 && t == 0) {
+            if(curveContents.size() >= 2) {
+                //real_indices << real_index << endl;
+                curves.push_back(PolygonalPath(curveContents));
+            }
+            // real_index++;
+            curveContents.clear();
+        } else if (x < xmin || x > xmax ||
+                   y < ymin || y > ymax ||
+                   t < tmin || t > tmax) {//end of a curve
+            if(curveContents.size() >=2){
+                //real_indices << real_index << endl;
+                curves.push_back(PolygonalPath(curveContents));
+            }
+            curveContents.clear();
+        } else {
+            pair<Vector2D, float> newPoint = make_pair(Vector2D(x,y), t);
+            if (curveContents.size() == 0)
+                curveContents.push_back(newPoint);
+            else if (t == curveContents.back().second)
+                continue;
+            else if (x == curveContents.back().first.X() &&
+                     y == curveContents.back().first.Y())
+                continue;
+            else
+                curveContents.push_back(newPoint);
+        }
+    }
+}
+
 void Util::loadCurves(string filename, vector<PolygonalPath>& curves,
                       float &xmin, float &xmax, float &ymin, float &ymax,
                       float &tmin, float &tmax){
@@ -123,9 +173,6 @@ void Util::loadCurves(string filename, vector<PolygonalPath>& curves,
         }
         outfile << "0 0 0" << endl;
     }
-
-
-
 
 
 #ifdef DEBUG

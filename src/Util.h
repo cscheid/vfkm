@@ -2,6 +2,7 @@
 #define UTIL_H
 
 #include <vector>
+#include <sstream>
 #include "PolygonalPath.h"
 #include "Vector.h"
 
@@ -24,6 +25,9 @@ public:
     Util();
 
     static void loadCurves(std::string filename, std::vector<PolygonalPath>&);
+    static void loadCurves(std::stringstream &stream, std::vector<PolygonalPath>&,
+                           float &xmin, float &xmax, float &ymin, float &ymax,
+                           float &tmin, float &tmax);
     static void loadCurves(std::string filename, std::vector<PolygonalPath>&,
                            float &xmin, float &xmax, float &ymin, float &ymax,
                            float &tmin, float &tmax);
