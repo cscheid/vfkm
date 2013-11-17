@@ -115,10 +115,10 @@ void saveExperiment(string directory, string currentFileLoaded, Cluster* root){
 
 }
 
-void emscripten_main(const std::string &trajectories,
-                     int gridResolution,
-                     int numberOfVectorFields,
-                     float smoothnessWeight)
+StepperState emscripten_main_2(const std::string &trajectories,
+                               int gridResolution,
+                               int numberOfVectorFields,
+                               float smoothnessWeight)
 {
     //load files
     cout << "Loading Files..." << endl;
@@ -152,66 +152,8 @@ void emscripten_main(const std::string &trajectories,
         mapCurveToIndexInCurveVector[i] = currentCluster->indices.at(i);
     }
 
-    vector<pair<Vector*,Vector*> > vectorFields;
-    int gridDimension  = g->getResolutionX() * g->getResolutionY();
-    for(int i = 0 ; i < numberOfVectorFields ; ++i){
-        Vector* xComponent = new Vector(gridDimension);
-        Vector* yComponent = new Vector(gridDimension);
-        vectorFields.push_back(make_pair(xComponent, yComponent));
-    }
-
-    cout << "Calling optimizer..." << endl;
-    op.optimizeImplicitFastWithWeights(*g,numberOfVectorFields, curvesInCurrentCluster,
-                                       vectorFields, &(mapCurveToVF[0]), mapCurveToError,smoothnessWeight);
-
-    //count number of curves for each vf
-    mapVectorFieldToError = vector<float>(vectorFields.size(),0);
-    int numberOfChildren = vectorFields.size();
-    int numberOfCurvesPerVF[numberOfChildren];
-    for(int i = 0 ; i < numberOfChildren ; ++i){
-        numberOfCurvesPerVF[i] = 0;
-    }
-
-    //compute error by vector field and total error
-    vector<vector<int> > mapCurvesToClusters(numberOfChildren,vector<int>());
-    vector<vector<float> > mapCurveErrorsToClusters(numberOfChildren,vector<float>());
-
-    for(int i = 0 ; i < numberOfCurves ; ++i){
-        vector<int>& curveCluster
-                = mapCurvesToClusters.at(mapCurveToVF[i]);
-        vector<float>& curveErrorsCluster
-                = mapCurveErrorsToClusters.at(mapCurveToVF[i]);
-
-        curveCluster.push_back(mapCurveToIndexInCurveVector[i]);
-        curveErrorsCluster.push_back(mapCurveToError[i]);
-
-        float &error = mapVectorFieldToError.at(mapCurveToVF[i]);
-        error += mapCurveToError[i];
-        numberOfCurvesPerVF[mapCurveToVF[i]] += 1;
-    }
-
-    //update cluster struct
-    currentCluster->clearChildren();
-    for(int i = 0 ; i < numberOfChildren ; ++i){
-        Cluster* c = new Cluster();
-        c->children.clear();
-        c->parent = currentCluster;
-        stringstream ss;
-        ss << currentCluster->name << ":" << i;
-        c->name = ss.str();
-        c->error = mapVectorFieldToError[i];
-        c->indices = mapCurvesToClusters.at(i);
-        c->curveErrors = mapCurveErrorsToClusters.at(i);
-        currentCluster->children.push_back(c);
-        c->vectorField = vectorFields.at(i);
-        float maxE = -1000;
-        for(int j = 0 ; j < (int)c->curveErrors.size() ; ++j){
-            float currentError = c->curveErrors.at(j);
-            if(currentError > maxE)
-                maxE = currentError;
-        }
-        c->maxError = maxE;
-    }
+    return StepperState(g, numberOfVectorFields, smoothnessWeight,
+                        curvesInCurrentCluster);
 }
 
 EMSCRIPTEN_BINDINGS(my_module)
@@ -221,6 +163,25 @@ EMSCRIPTEN_BINDINGS(my_module)
         .function("X", &Vector2D::X)
         .function("Y", &Vector2D::Y)
         ;
+
+    class_<Vector>("Vector")
+        .function("getValue", &Vector::getValue)
+        .function("getDimension", &Vector::getDimension)
+        ;
+
+    value_object<pair<int, double> >("pairIntDouble")
+        .field("first", &pair<int,double>::first)
+        .field("second", &pair<int,double>::second)
+        ;
+
+    value_object<pair<Vector, Vector> >("pairVectorVector")
+        .field("first", &pair<Vector,Vector>::first)
+        .field("second", &pair<Vector,Vector>::second)
+        ;
+
+    class_<StepperState>("StepperState")
+        .function("step", &StepperState::step)
+        .function("get", &StepperState::get);
 
     value_object<pair<Vector2D, float> >("pairVector2DFloat")
         .field("first", &pair<Vector2D,float>::first)
@@ -233,136 +194,5 @@ EMSCRIPTEN_BINDINGS(my_module)
         .function("getTangent", &PolygonalPath::getPoint)
         ;
 
-    emscripten::function("main", &emscripten_main);
+    emscripten::function("init", &emscripten_main_2);
 }
-
-// int forget_main(int argc, char *argv[]){
-//     int rightNumberOfParameters = 6;
-
-//     if(argc != rightNumberOfParameters){
-//         //print usage
-//         cout << "./vfkm trajectoryFile gridResolution numberOfVectorFields smoothnessWeight outputDirectory" << endl;
-//         return 0;
-//     }
-
-//     //set parameters
-//     string filename(argv[1]);
-//     int    gridResolution = atoi(argv[2]);
-//     int    numberOfVectorFields = atoi(argv[3]);
-//     float  smoothnessWeight = atof(argv[4]);
-//     string outputDirectory(argv[5]);
-
-//     //load files
-//     cout << "Loading Files..." << endl;
-//     vector<PolygonalPath> curves;
-//     Cluster* rootCluster = NULL;
-//     Grid* g = NULL;
-
-//     //
-//     cout << "Loading data" << endl;
-//     initExperiment(filename, rootCluster, g, curves, gridResolution);
-
-//     //optimize
-//     cout << "Optimizing..." << endl;
-//     Cluster* currentCluster = rootCluster;
-
-//     //Optimize
-//     Optimizer op(g->getResolutionX() * g->getResolutionY());
-//     int numberOfCurves = currentCluster->indices.size();
-
-//     unsigned short mapCurveToVF[numberOfCurves];
-//     float mapCurveToError[numberOfCurves];
-//     unsigned int mapCurveToIndexInCurveVector[numberOfCurves];
-//     vector<float> mapVectorFieldToError;
-//     vector<PolygonalPath> curvesInCurrentCluster;
-
-//     for(int i = 0 ; i <numberOfCurves ; ++i){
-//         mapCurveToError[i] = 0;
-//         mapCurveToVF[i] = -1;
-
-//         curvesInCurrentCluster.push_back(curves.at(currentCluster->indices.at(i)));
-//         mapCurveToIndexInCurveVector[i] = currentCluster->indices.at(i);
-//     }
-
-//     vector<pair<Vector*,Vector*> > vectorFields;
-//     int gridDimension  = g->getResolutionX() * g->getResolutionY();
-//     for(int i = 0 ; i < numberOfVectorFields ; ++i){
-//         Vector* xComponent = new Vector(gridDimension);
-//         Vector* yComponent = new Vector(gridDimension);
-//         vectorFields.push_back(make_pair(xComponent, yComponent));
-//     }
-
-//     op.optimizeImplicitFastWithWeights(*g,numberOfVectorFields, curvesInCurrentCluster,
-//                                        vectorFields, &(mapCurveToVF[0]), mapCurveToError,smoothnessWeight);
-
-//     //count number of curves for each vf
-//     mapVectorFieldToError = vector<float>(vectorFields.size(),0);
-//     int numberOfChildren = vectorFields.size();
-//     int numberOfCurvesPerVF[numberOfChildren];
-//     for(int i = 0 ; i < numberOfChildren ; ++i){
-//         numberOfCurvesPerVF[i] = 0;
-//     }
-
-//     //compute error by vector field and total error
-//     vector<vector<int> > mapCurvesToClusters(numberOfChildren,vector<int>());
-//     vector<vector<float> > mapCurveErrorsToClusters(numberOfChildren,vector<float>());
-
-//     for(int i = 0 ; i < numberOfCurves ; ++i){
-//         vector<int>& curveCluster
-//                 = mapCurvesToClusters.at(mapCurveToVF[i]);
-//         vector<float>& curveErrorsCluster
-//                 = mapCurveErrorsToClusters.at(mapCurveToVF[i]);
-
-//         curveCluster.push_back(mapCurveToIndexInCurveVector[i]);
-//         curveErrorsCluster.push_back(mapCurveToError[i]);
-
-//         float &error = mapVectorFieldToError.at(mapCurveToVF[i]);
-//         error += mapCurveToError[i];
-//         numberOfCurvesPerVF[mapCurveToVF[i]] += 1;
-//     }
-
-//     //update cluster struct
-//     currentCluster->clearChildren();
-//     for(int i = 0 ; i < numberOfChildren ; ++i){
-//         Cluster* c = new Cluster();
-//         c->children.clear();
-//         c->parent = currentCluster;
-//         stringstream ss;
-//         ss << currentCluster->name << ":" << i;
-//         c->name = ss.str();
-//         c->error = mapVectorFieldToError[i];
-//         c->indices = mapCurvesToClusters.at(i);
-//         c->curveErrors = mapCurveErrorsToClusters.at(i);
-//         currentCluster->children.push_back(c);
-
-//         c->vectorField = vectorFields.at(i);
-
-//         float maxE = -1000;
-//         for(int j = 0 ; j < (int)c->curveErrors.size() ; ++j){
-//             float currentError = c->curveErrors.at(j);
-//             if(currentError > maxE)
-//                 maxE = currentError;
-//         }
-//         c->maxError = maxE;
-//     }
-
-//     //
-//     saveExperiment(outputDirectory, filename, rootCluster);
-
-//     //clean memory
-//     cout << "Cleaning Memory" << endl;
-//     for(int i = 0 ; i < numberOfVectorFields ; ++i){
-// 	std::pair<Vector*, Vector*> &vfs = vectorFields.at(i);
-// 	Vector* componentX  = vfs.first;
-// 	if(componentX != NULL){
-// 	    delete componentX;
-// 	}
-	    
-// 	Vector* componentY  = vfs.second;
-// 	if(componentY != NULL){
-// 	    delete componentY;
-// 	}
-
-//     }
-//     return 0;
-// }

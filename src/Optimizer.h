@@ -22,6 +22,29 @@ struct ProblemSettings
         smoothnessWeight(sw) {}
 };
 
+struct StepperState
+{
+    std::vector<CurveDescription> curve_descriptions;
+    std::vector<std::pair<Vector, Vector> > vectorFields;
+    std::vector<std::vector<int> > mapVectorFieldCurves;
+
+    Grid *grid;
+    int numberOfVectorFields;
+    float totalCurveLength;
+    float smoothnessWeight;
+    double totalError;
+    unsigned short *mapCurveToVectorField;
+    float *mapCurveToError;
+
+    StepperState(Grid *grid, int numberOfVectorFields,
+                 float smoothnessWeight, 
+                 std::vector<PolygonalPath> curves);
+
+    std::pair<int, double> step();
+
+    std::pair<Vector, Vector> get(unsigned i);
+};
+
 class Optimizer
 {
 public:

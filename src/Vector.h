@@ -20,6 +20,9 @@ public:
     inline void setValue(int index, VECTOR_TYPE value) {
         values[index] = value;
     }
+    inline VECTOR_TYPE getValue(int index) {
+        return values[index];
+    }
     inline void setValues(VECTOR_TYPE *newValues) {
       for(int i = 0 ; i < dimension ; ++i)
         values[i] = newValues[i];

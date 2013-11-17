@@ -549,3 +549,41 @@ void Optimizer::optimizeImplicitFastWithWeights
     }
 }
 
+StepperState::StepperState(Grid *grid, int numberOfVectorFields,
+                           float smoothnessWeight,
+                           vector<PolygonalPath> curves
+                           )
+    : grid(grid)
+    , numberOfVectorFields(numberOfVectorFields)
+    , smoothnessWeight(smoothnessWeight)
+{
+    int sz = grid->getResolutionX() * grid->getResolutionY();
+    mapCurveToVectorField = new unsigned short[curves.size()];
+    mapCurveToError = new float[curves.size()];
+
+    vectorFields = vector< pair<Vector, Vector> >(numberOfVectorFields, make_pair(Vector(sz), Vector(sz)));
+    set_constraints(curve_descriptions, totalCurveLength, curves, *grid);
+    pair<vector<int>, vector<vector<int> > > f = compute_first_assignment(
+        *grid, numberOfVectorFields, curve_descriptions, totalCurveLength, smoothnessWeight);
+    mapVectorFieldCurves = f.second;
+    copy(f.first.begin(), f.first.end(), mapCurveToVectorField);
+    totalError = 1e20;
+}
+
+pair<int, double> StepperState::step()
+{
+    int total_change = 0;
+    optimize_all_vector_fields(vectorFields, *grid, mapVectorFieldCurves, curve_descriptions,
+                               totalCurveLength, smoothnessWeight);
+    optimize_assignments(total_change, totalError, mapCurveToVectorField, mapVectorFieldCurves, mapCurveToError, vectorFields, curve_descriptions, totalCurveLength, smoothnessWeight, *grid);
+
+    totalError = get_total_error(curve_descriptions, vectorFields, mapCurveToVectorField, totalCurveLength, smoothnessWeight, *grid);
+
+    repopulate_empty_cluster(mapVectorFieldCurves, mapCurveToVectorField, vectorFields);
+    return make_pair(total_change, totalError);
+}
+
+pair<Vector, Vector> StepperState::get(unsigned i)
+{
+    return vectorFields[i];
+}
